@@ -16,7 +16,7 @@ from app.db.neo4j_client import get_driver
 
 LOGGER = logging.getLogger(__name__)
 
-ETHERSCAN_BASE_URL = "https://api.etherscan.io/api"
+ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api"
 
 
 @dataclass
@@ -36,6 +36,7 @@ class TransactionRecord:
 def _fetch_transactions(address: str) -> List[TransactionRecord]:
     """Fetch all transactions for a given address via the Etherscan API."""
     api_key = os.getenv("ETHERSCAN_API_KEY")
+    chain_id = os.getenv("ETHERSCAN_CHAIN_ID", "1")
     if not api_key:
         raise ValueError("ETHERSCAN_API_KEY environment variable is required for ingestion")
 
@@ -43,6 +44,7 @@ def _fetch_transactions(address: str) -> List[TransactionRecord]:
         "module": "account",
         "action": "txlist",
         "address": address,
+        "chainid": chain_id,
         "startblock": 0,
         "endblock": 99999999,
         "page": 1,
@@ -61,12 +63,39 @@ def _fetch_transactions(address: str) -> List[TransactionRecord]:
         raise RuntimeError("Failed to fetch transactions from Etherscan") from exc
 
     status = payload.get("status")
-    if status != "1":
-        message = payload.get("message", "Unknown error")
-        LOGGER.error("Etherscan API returned error: %s", message)
-        raise RuntimeError(f"Etherscan API error: {message}")
+    message = payload.get("message", "")
+    raw_result = payload.get("result")
 
-    results = payload.get("result", [])
+    def _normalize_text(value: Any) -> str:
+        return str(value).lower() if value is not None else ""
+
+    normalized_result = _normalize_text(raw_result)
+
+    if status != "1":
+        if "no transactions found" in normalized_result:
+            LOGGER.info("No transactions available for %s", address)
+            return []
+        if "max rate limit reached" in normalized_result:
+            LOGGER.error("Etherscan rate limit reached while fetching %s", address)
+            raise RuntimeError("Etherscan API rate limit reached. Please retry later.")
+        if "invalid api key" in normalized_result:
+            raise RuntimeError("Etherscan rejected the API key. Verify ETHERSCAN_API_KEY.")
+        if "invalid address format" in normalized_result or "not a valid address" in normalized_result:
+            raise ValueError(f"Invalid Ethereum address for Etherscan: {address}")
+
+        error_detail = raw_result if raw_result else message or "Unknown error"
+        LOGGER.error("Etherscan API returned error for %s: %s", address, error_detail)
+        raise RuntimeError(f"Etherscan API error: {error_detail}")
+
+    if isinstance(raw_result, list):
+        results = raw_result
+    elif "no transactions found" in normalized_result:
+        LOGGER.info("No transactions available for %s", address)
+        return []
+    else:
+        LOGGER.error("Unexpected Etherscan response format for %s: %s", address, raw_result)
+        raise RuntimeError("Unexpected Etherscan response format")
+
     transactions: List[TransactionRecord] = []
 
     for item in results:
@@ -95,6 +124,7 @@ def _fetch_transactions(address: str) -> List[TransactionRecord]:
             LOGGER.warning("Skipping malformed transaction entry: %s", exc)
             continue
 
+    LOGGER.info("Fetched %d transactions for %s from Etherscan", len(transactions), address)
     return transactions
 
 
@@ -124,6 +154,7 @@ def _persist_transactions(session: Session, transactions: List[TransactionRecord
     """
 
     session.run(query, transactions=[tx.__dict__ for tx in transactions])
+    LOGGER.info("Persisted %d transactions to Neo4j", len(transactions))
     return len(transactions)
 
 

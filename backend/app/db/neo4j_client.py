@@ -34,7 +34,15 @@ def _build_driver() -> Driver:
         )
 
     LOGGER.info("Initializing Neo4j driver for %s", uri)
-    return GraphDatabase.driver(uri, auth=(user, password))
+    try:
+        driver = GraphDatabase.driver(uri, auth=(user, password))
+        driver.verify_connectivity()
+    except Neo4jError as exc:
+        LOGGER.exception("Unable to connect to Neo4j at %s: %s", uri, exc)
+        raise RuntimeError("Unable to connect to Neo4j") from exc
+
+    LOGGER.info("Successfully connected to Neo4j at %s", uri)
+    return driver
 
 
 def get_driver() -> Driver:
@@ -44,7 +52,7 @@ def get_driver() -> Driver:
     if _DRIVER is None:
         try:
             _DRIVER = _build_driver()
-        except (Neo4jError, ValueError) as exc:
+        except (Neo4jError, ValueError, RuntimeError) as exc:
             LOGGER.exception("Unable to initialize Neo4j driver: %s", exc)
             raise
 

@@ -24,6 +24,7 @@ def refresh_alerts(contamination: float = Query(default=0.05, ge=0.01, le=0.3)) 
         LOGGER.exception("Failed to refresh alerts: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    LOGGER.info("Refreshed alerts with contamination %.2f -> %d results", contamination, len(alerts))
     return AlertResponse(alerts=alerts)
 
 
@@ -36,6 +37,7 @@ def list_alerts(limit: int = Query(default=25, ge=1, le=200)) -> AlertResponse:
         LOGGER.exception("Failed to fetch alerts: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    LOGGER.info("Fetched %d alerts (limit=%d)", len(alerts), limit)
     return AlertResponse(alerts=alerts)
 
 

@@ -122,6 +122,16 @@ def trace_route(payload: TraceRequest) -> TraceResponse:
         "node_count": len(nodes),
     }
 
+    LOGGER.info(
+        "Trace completed for %s -> %s (max_hops=%d, paths=%d, edges=%d, nodes=%d)",
+        source,
+        target or "*",
+        max_hops,
+        metadata["path_count"],
+        metadata["edge_count"],
+        metadata["node_count"],
+    )
+
     return TraceResponse(nodes=list(nodes.values()), edges=edges, metadata=metadata)
 
 

@@ -24,6 +24,7 @@ export default function App() {
   const { message, variant, showMessage } = useStatus();
   const [selectedAddress, setSelectedAddress] = useState('');
   const [blacklistUploading, setBlacklistUploading] = useState(false);
+  const [clustering, setClustering] = useState(false);
 
   const handleAlertSelect = (address) => {
     setSelectedAddress(address);
@@ -31,11 +32,14 @@ export default function App() {
   };
 
   const handleClusterRun = async () => {
+    setClustering(true);
     try {
       const { assigned_addresses: assigned } = await triggerClustering();
       showMessage(`Clustered ${assigned} addresses`);
     } catch (err) {
       showMessage(err.message, 'error');
+    } finally {
+      setClustering(false);
     }
   };
 
@@ -65,9 +69,10 @@ export default function App() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleClusterRun}
-              className="rounded bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500"
+              disabled={clustering}
+              className="rounded bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
             >
-              Run Clustering
+              {clustering ? 'Clustering…' : 'Run Clustering'}
             </button>
             <label className="flex items-center gap-2 rounded border border-dashed border-slate-600 px-3 py-2 text-xs text-slate-300 hover:border-slate-400">
               <span>{blacklistUploading ? 'Uploading…' : 'Upload Blacklist CSV'}</span>

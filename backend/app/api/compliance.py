@@ -26,6 +26,7 @@ async def upload_blacklist(file: UploadFile = File(...)) -> dict:
         LOGGER.exception("Failed to process blacklist upload: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    LOGGER.info("Processed blacklist upload and updated %d addresses", updated)
     return {"updated": updated}
 
 
@@ -38,6 +39,7 @@ def recompute_severity() -> dict:
         LOGGER.exception("Failed to recompute severity: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    LOGGER.info("Recomputed severity classifications for %d alerts", updated)
     return {"updated": updated}
 
 

@@ -9,7 +9,7 @@ An end-to-end blockchain transaction analytics MVP featuring ingestion, tracing,
 │   ├── app/
 │   │   ├── api/             # FastAPI routers (trace, alerts, compliance, etc.)
 │   │   ├── db/              # Neo4j driver bootstrap
-│   │   ├── ingest/          # Etherscan ingestion pipeline
+│   │   ├── ingest/          # Etherscan + sample dataset ingestion helpers
 │   │   ├── ml/              # IsolationForest anomaly scoring
 │   │   ├── models/          # Shared Pydantic schemas
 │   │   └── utils/           # Clustering, addresses, compliance helpers
@@ -54,6 +54,8 @@ NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your-password
 ETHERSCAN_API_KEY=your-etherscan-key
+ETHERSCAN_CHAIN_ID=1
+CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 ### Start Neo4j Locally (Docker)
@@ -72,6 +74,7 @@ Key endpoints:
 
 - `GET /health` – readiness
 - `GET /ingest/{address}` – pull transactions from Etherscan and persist to Neo4j
+- `POST /ingest/sample` – load the bundled `data/sample_txns.json` dataset into Neo4j
 - `POST /trace` – shortest-path tracing with hop limits
 - `POST /alerts/refresh` – recompute IsolationForest scores
 - `GET /alerts` – high-risk addresses with severity
@@ -96,7 +99,7 @@ The UI includes:
 
 ## Analytics Pipeline Overview
 
-1. **Ingestion** – `GET /ingest/{address}` fetches transactions via Etherscan and builds graph relationships in Neo4j.
+1. **Ingestion** – `GET /ingest/{address}` fetches transactions via Etherscan and builds graph relationships in Neo4j (or use `POST /ingest/sample` to load the bundled dataset without external APIs).
 2. **Clustering** – `POST /address/cluster` labels connected components with `cluster_id` metadata.
 3. **Anomaly Detection** – `POST /alerts/refresh` computes risk scores using IsolationForest features (volume, velocity, counterparties).
 4. **Compliance** – `POST /compliance/blacklist` flags sanctioned wallets and bumps alert severity.
