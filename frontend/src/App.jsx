@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import AlertsView from './components/AlertsView';
 import TraceView from './components/TraceView';
-import { triggerClustering, uploadBlacklist } from './api';
+import {
+  ingestAddressTransactions,
+  triggerClustering,
+  uploadBlacklist,
+  refreshAlerts as requestAlertRefresh,
+  recomputeSeverity,
+} from './api';
 
 function useStatus() {
   const [message, setMessage] = useState(null);
@@ -23,12 +29,49 @@ function useStatus() {
 export default function App() {
   const { message, variant, showMessage } = useStatus();
   const [selectedAddress, setSelectedAddress] = useState('');
+  const [ingestAddress, setIngestAddress] = useState('');
+  const [ingesting, setIngesting] = useState(false);
   const [blacklistUploading, setBlacklistUploading] = useState(false);
   const [clustering, setClustering] = useState(false);
+  const [alertsRefreshSignal, setAlertsRefreshSignal] = useState(0);
+
+  const triggerAlertsReload = useCallback(async () => {
+    await requestAlertRefresh();
+    await recomputeSeverity();
+    setAlertsRefreshSignal((value) => value + 1);
+  }, []);
 
   const handleAlertSelect = (address) => {
     setSelectedAddress(address);
+    setIngestAddress(address);
     showMessage(`Loaded trace defaults for ${address}`, 'info');
+  };
+
+  const handleIngest = async (event) => {
+    event.preventDefault();
+    const targetAddress = ingestAddress.trim();
+    if (!targetAddress) {
+      showMessage('Enter an Ethereum address to ingest', 'error');
+      return;
+    }
+    setIngesting(true);
+    try {
+      const response = await ingestAddressTransactions(targetAddress);
+      const normalized = response?.data?.address ?? targetAddress.toLowerCase();
+      setSelectedAddress(normalized);
+      setIngestAddress(normalized);
+      const fetched = response?.data?.fetched_count ?? 0;
+      showMessage(`Ingested ${fetched} transactions for ${normalized}`);
+      try {
+        await triggerAlertsReload();
+      } catch (refreshError) {
+        showMessage(refreshError.message, 'error');
+      }
+    } catch (err) {
+      showMessage(err.message, 'error');
+    } finally {
+      setIngesting(false);
+    }
   };
 
   const handleClusterRun = async () => {
@@ -36,6 +79,11 @@ export default function App() {
     try {
       const { assigned_addresses: assigned } = await triggerClustering();
       showMessage(`Clustered ${assigned} addresses`);
+      try {
+        await triggerAlertsReload();
+      } catch (refreshError) {
+        showMessage(refreshError.message, 'error');
+      }
     } catch (err) {
       showMessage(err.message, 'error');
     } finally {
@@ -50,6 +98,11 @@ export default function App() {
     try {
       const { updated } = await uploadBlacklist(file);
       showMessage(`Marked ${updated} addresses as sanctioned`);
+      try {
+        await triggerAlertsReload();
+      } catch (refreshError) {
+        showMessage(refreshError.message, 'error');
+      }
     } catch (err) {
       showMessage(err.message, 'error');
     } finally {
@@ -67,6 +120,23 @@ export default function App() {
             Explore Ethereum transaction flows, detect anomalies, and monitor compliance alerts in real time.
           </p>
           <div className="flex flex-wrap items-center gap-3">
+            <form onSubmit={handleIngest} className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={ingestAddress}
+                onChange={(event) => setIngestAddress(event.target.value)}
+                placeholder="0x… address to ingest"
+                className="w-64 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+                disabled={ingesting}
+              />
+              <button
+                type="submit"
+                disabled={ingesting}
+                className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+              >
+                {ingesting ? 'Ingesting…' : 'Ingest Address'}
+              </button>
+            </form>
             <button
               onClick={handleClusterRun}
               disabled={clustering}
@@ -94,14 +164,14 @@ export default function App() {
           )}
         </header>
 
-        <section className="grid gap-8 lg:grid-cols-5">
-          <div className="lg:col-span-3 space-y-4">
+        <section className="flex flex-col gap-12">
+          <div className="space-y-4">
             <h2 className="text-lg font-semibold text-slate-200">Trace Explorer</h2>
             <TraceView defaultFrom={selectedAddress} />
           </div>
-          <div className="lg:col-span-2 space-y-4">
+          <div className="space-y-4">
             <h2 className="text-lg font-semibold text-slate-200">Alerts</h2>
-            <AlertsView onSelectAddress={handleAlertSelect} />
+            <AlertsView onSelectAddress={handleAlertSelect} refreshSignal={alertsRefreshSignal} />
           </div>
         </section>
       </div>

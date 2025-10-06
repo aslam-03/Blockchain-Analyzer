@@ -16,7 +16,7 @@ def mock_alerts(monkeypatch):
         }
     ]
 
-    monkeypatch.setattr(alerts_module, 'fetch_alerts', lambda limit=25: sample_alerts)
+    monkeypatch.setattr(alerts_module, 'fetch_alerts', lambda limit=25: (sample_alerts, len(sample_alerts)))
 
 
 def test_alerts_endpoint(client):
@@ -25,3 +25,4 @@ def test_alerts_endpoint(client):
     payload = response.json()
     assert payload['alerts'][0]['address'] == '0xalert1'
     assert payload['alerts'][0]['severity'] == 'HIGH'
+    assert payload['total'] == 1

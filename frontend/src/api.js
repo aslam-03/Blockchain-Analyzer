@@ -23,6 +23,16 @@ export async function fetchAlerts(limit = 25) {
   return handleResponse(response);
 }
 
+export async function ingestAddressTransactions(address) {
+  const normalized = address?.trim();
+  if (!normalized) {
+    throw new Error('Ethereum address is required');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/ingest/${encodeURIComponent(normalized)}`);
+  return handleResponse(response);
+}
+
 export async function refreshAlerts(contamination = 0.05) {
   const url = new URL(`${API_BASE_URL}/alerts/refresh`);
   url.searchParams.set('contamination', contamination.toString());

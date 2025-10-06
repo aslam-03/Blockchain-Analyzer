@@ -22,6 +22,7 @@ class AlertResponse(BaseModel):
     """Response payload for alert listings."""
 
     alerts: list[AlertRecord]
+    total: int = Field(default=0, ge=0)
 
 
 __all__ = ["AlertRecord", "AlertResponse"]

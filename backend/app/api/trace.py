@@ -94,7 +94,7 @@ def _execute_trace(session: Session, source: str, target: str | None, max_hops: 
     return session.run(query, params)
 
 
-@router.post("/", response_model=TraceResponse)
+@router.post("", response_model=TraceResponse)
 def trace_route(payload: TraceRequest) -> TraceResponse:
     """Trace funds from a source address to an optional target using graph search."""
     source, target, max_hops = _normalize_request(payload)

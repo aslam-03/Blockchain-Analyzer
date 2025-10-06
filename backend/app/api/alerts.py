@@ -19,26 +19,26 @@ def refresh_alerts(contamination: float = Query(default=0.05, ge=0.01, le=0.3)) 
     """Trigger anomaly detection and return the refreshed alerts."""
     try:
         run_anomaly_detection(contamination=contamination)
-        alerts = fetch_alerts()
+        alerts, total = fetch_alerts()
     except RuntimeError as exc:
         LOGGER.exception("Failed to refresh alerts: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     LOGGER.info("Refreshed alerts with contamination %.2f -> %d results", contamination, len(alerts))
-    return AlertResponse(alerts=alerts)
+    return AlertResponse(alerts=alerts, total=total)
 
 
 @router.get("/", response_model=AlertResponse)
 def list_alerts(limit: int = Query(default=25, ge=1, le=200)) -> AlertResponse:
     """Return the current list of anomaly alerts ordered by risk score."""
     try:
-        alerts = fetch_alerts(limit=limit)
+        alerts, total = fetch_alerts(limit=limit)
     except RuntimeError as exc:
         LOGGER.exception("Failed to fetch alerts: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     LOGGER.info("Fetched %d alerts (limit=%d)", len(alerts), limit)
-    return AlertResponse(alerts=alerts)
+    return AlertResponse(alerts=alerts, total=total)
 
 
 __all__ = ["router"]

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchAlerts, refreshAlerts, recomputeSeverity } from '../api';
 
 const severityColors = {
@@ -30,27 +30,41 @@ function buildCsv(alerts) {
   return [header.join(','), ...rows].join('\n');
 }
 
-export default function AlertsView({ onSelectAddress }) {
+export default function AlertsView({ onSelectAddress, refreshSignal = 0 }) {
   const [alerts, setAlerts] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const loadAlerts = async () => {
+  const severityStats = useMemo(() => {
+    const summary = { total, high: 0, anomalies: 0, sanctioned: 0 };
+    for (const alert of alerts) {
+      if (alert.severity === 'HIGH') summary.high += 1;
+      if (alert.is_anomaly) summary.anomalies += 1;
+      if (alert.is_sanctioned) summary.sanctioned += 1;
+    }
+    return summary;
+  }, [alerts, total]);
+
+  const loadAlerts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await fetchAlerts();
-      setAlerts(response.alerts);
+      const nextAlerts = response.alerts ?? [];
+      const nextTotal = response.total ?? nextAlerts.length;
+      setAlerts(nextAlerts);
+      setTotal(nextTotal);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadAlerts();
-  }, []);
+  }, [loadAlerts, refreshSignal]);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -79,6 +93,12 @@ export default function AlertsView({ onSelectAddress }) {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleClear = () => {
+    setAlerts([]);
+    setTotal(0);
+    setError(null);
+  };
+
   const handleRowClick = (address) => {
     if (onSelectAddress) {
       onSelectAddress(address);
@@ -104,13 +124,42 @@ export default function AlertsView({ onSelectAddress }) {
         >
           Export CSV
         </button>
+        <button
+          onClick={handleClear}
+          disabled={loading || (!alerts.length && !error)}
+          className="rounded border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-500 disabled:opacity-40"
+        >
+          Clear Alerts
+        </button>
         <p className="text-xs text-slate-400">Click an alert row to load traces for the selected address.</p>
       </div>
 
       {error && <p className="rounded bg-red-900/40 px-4 py-2 text-red-200">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900">
-        <table className="min-w-full text-left text-sm text-slate-200">
+      {total > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Total Alerts</p>
+            <p className="mt-2 text-2xl font-semibold">{severityStats.total}</p>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
+            <p className="text-xs uppercase tracking-wide text-slate-400">High Severity</p>
+            <p className="mt-2 text-2xl font-semibold">{severityStats.high}</p>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Anomalies</p>
+            <p className="mt-2 text-2xl font-semibold">{severityStats.anomalies}</p>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Sanctioned</p>
+            <p className="mt-2 text-2xl font-semibold">{severityStats.sanctioned}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+        <div className="max-h-[420px] overflow-y-auto">
+          <table className="min-w-full text-left text-sm text-slate-200">
           <thead className="bg-slate-800/80 text-xs uppercase tracking-wide text-slate-400">
             <tr>
               <th className="px-4 py-3">Address</th>
@@ -157,7 +206,8 @@ export default function AlertsView({ onSelectAddress }) {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </div>
   );

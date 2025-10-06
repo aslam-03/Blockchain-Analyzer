@@ -204,29 +204,42 @@ def run_anomaly_detection(contamination: float = 0.05) -> List[Dict]:
     return results
 
 
-def fetch_alerts(limit: int = 25) -> List[Dict]:
-    """Retrieve the top high-risk addresses from Neo4j."""
+def fetch_alerts(limit: int = 25) -> tuple[List[Dict], int]:
+    """Retrieve the top high-risk addresses and total count from Neo4j."""
     driver = get_driver()
 
     query = """
-    MATCH (a:Address)
-    WHERE a.risk_score IS NOT NULL
-    RETURN {
+    CALL {
+        MATCH (a:Address)
+        WHERE a.risk_score IS NOT NULL
+        RETURN count(*) AS total
+    }
+    CALL {
+        MATCH (a:Address)
+        WHERE a.risk_score IS NOT NULL
+        RETURN a
+        ORDER BY a.risk_score DESC
+        LIMIT $limit
+    }
+    RETURN total, collect({
         address: a.address,
         cluster_id: a.cluster_id,
         risk_score: a.risk_score,
         is_anomaly: coalesce(a.is_anomaly, false),
         is_sanctioned: coalesce(a.is_sanctioned, false),
         severity: coalesce(a.alert_severity, 'LOW')
-    } AS alert
-    ORDER BY a.risk_score DESC
-    LIMIT $limit
+    }) AS alerts
     """
 
     try:
         with driver.session() as session:
-            records = session.run(query, limit=limit)
-            return [record["alert"] for record in records if record.get("alert")]
+            record = session.run(query, limit=limit).single()
+            if not record:
+                return [], 0
+
+            alerts = record.get("alerts") or []
+            total = record.get("total") or 0
+            return alerts, int(total)
     except Neo4jError as exc:
         LOGGER.exception("Failed to fetch alerts: %s", exc)
         raise RuntimeError("Unable to retrieve alerts from Neo4j") from exc
